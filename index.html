@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 한국어 맞춤법/띄어쓰기 실시간 교정기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- PWA/App Meta Tags 추가: 앱처럼 보이게 만듭니다. -->
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="한글 교정기">
+    <!-- 홈 화면 아이콘: 파란색 배경에 "AI" 텍스트가 있는 임시 아이콘입니다. -->
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/3b82f6/ffffff?text=AI">
+    <!-- /PWA/App Meta Tags -->
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* 로딩 스피너 스타일 */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl border border-gray-100">
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-4 text-center">
+            자동 <span class="text-red-500">맞춤법</span> 및 띄어쓰기 <span class="text-blue-600">실시간</span> 교정 도우미
+        </h1>
+        <p class="text-gray-500 mb-6 text-center">
+            **맞춤법 및 띄어쓰기**가 안 된 문장을 입력하고, 타이핑을 멈추면 **자동으로 교정됩니다.**
+        </p>
+
+        <!-- 입력 영역 -->
+        <div class="mb-6">
+            <label for="koreanInput" class="block text-sm font-medium text-gray-700 mb-2">
+                맞춤법/띄어쓰기 교정을 원하는 문장 입력
+            </label>
+            <textarea id="koreanInput" rows="6" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150 shadow-sm" placeholder="여기에맞춤법이나띄어쓰기가틀린한국어문장을입력하고타이핑을멈춰보세요."></textarea>
+            
+            <!-- 자동 교정 상태 표시 -->
+            <div id="statusArea" class="mt-2 flex items-center justify-end text-sm">
+                <div id="processingStatus" class="flex items-center text-blue-600 hidden">
+                    <div class="spinner w-4 h-4 mr-2"></div>
+                    <span>AI가 맞춤법/띄어쓰기를 교정 중...</span>
+                </div>
+                <div id="readyStatus" class="text-gray-500">
+                    <span>입력을 기다리는 중...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 결과 영역 -->
+        <div class="mt-4 border-t pt-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-3 flex justify-between items-center">
+                교정된 맞춤법 및 띄어쓰기 결과
+                <button id="copyButton" onclick="copyResult()" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center p-2 rounded-lg hover:bg-blue-50" disabled>
+                     <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2m-4 0V3m0 2h.01M9 12l2 2 4-4"></path></svg>
+                    복사
+                </button>
+            </h2>
+            <div id="koreanOutput" class="min-h-24 p-4 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 whitespace-pre-wrap leading-relaxed shadow-inner">
+                맞춤법 및 띄어쓰기 교정 결과가 여기에 자동으로 표시됩니다.
+            </div>
+            <p id="errorMessage" class="mt-2 text-sm text-red-600 hidden"></p>
+        </div>
+
+        <!-- 안내 메시지 박스 (Alert 대체) -->
+        <div id="messageBox" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden transition-opacity duration-300 opacity-0" onclick="hideMessage()">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full transform transition-transform duration-300 scale-95" onclick="event.stopPropagation()">
+                <h3 class="text-lg font-bold mb-3 text-gray-900">알림</h3>
+                <p id="messageText" class="text-gray-700"></p>
+                <button class="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" onclick="hideMessage()">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK 및 로직 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firestore 사용 시 로그 레벨 설정 (디버깅용)
+        setLogLevel('Debug');
+
+        // 전역 변수 설정
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+
+        // UI 요소
+        const inputElement = document.getElementById('koreanInput');
+        const outputElement = document.getElementById('koreanOutput');
+        const processingStatus = document.getElementById('processingStatus');
+        const readyStatus = document.getElementById('readyStatus');
+        const errorMessageElement = document.getElementById('errorMessage');
+        const copyButton = document.getElementById('copyButton');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        // 상태 관리
+        let isProcessing = false;
+
+        // 알림 메시지 표시 함수 (alert() 대체)
+        function showMessage(text) {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden');
+            // 애니메이션을 위해 딜레이 후 opacity 설정
+            setTimeout(() => {
+                messageBox.classList.add('opacity-100');
+                messageBox.querySelector('div').classList.remove('scale-95');
+                messageBox.querySelector('div').classList.add('scale-100');
+            }, 10);
+        }
+
+        // 알림 메시지 숨기기 함수
+        window.hideMessage = function() {
+            messageBox.classList.remove('opacity-100');
+            messageBox.querySelector('div').classList.remove('scale-100');
+            messageBox.querySelector('div').classList.add('scale-95');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 300);
+        }
+
+        // Firebase 초기화 및 인증
+        window.onload = async function() {
+            if (Object.keys(firebaseConfig).length > 0) {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                    } else {
+                        // 사용자 인증이 아직 안 되었거나 로그아웃 상태일 때 익명 로그인
+                        signInAnonymously(auth).then(cred => {
+                            userId = cred.user.uid;
+                            console.log("Signed in anonymously. User ID:", userId);
+                        }).catch(error => {
+                            console.error("Anonymous sign-in failed:", error);
+                        });
+                    }
+                });
+
+                if (initialAuthToken) {
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Signed in with custom token.");
+                    } catch (error) {
+                        console.error("Custom token sign-in failed, proceeding with anonymous.", error);
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } else {
+                // Firebase 미사용 시 사용자 ID 설정
+                userId = crypto.randomUUID();
+            }
+        
+            // 실시간 교정 기능 활성화
+            inputElement.addEventListener('input', debounce(applySpacing, 500));
+        };
+
+        /**
+         * 디바운스 함수: 함수 호출을 지연시키고, 일정 시간 동안 재호출이 없어야만 실행합니다.
+         * @param {Function} func 실행할 함수
+         * @param {number} delay 지연 시간 (밀리초)
+         */
+        function debounce(func, delay) {
+            let timeoutId;
+            return function(...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    func.apply(this, args);
+                }, delay);
+            };
+        }
+
+        // API 호출 및 지수 백오프 로직
+        async function retryFetch(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429) {
+                        throw new Error("Rate limit exceeded (429)");
+                    }
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    console.log(`Retry attempt ${i + 1} failed. Retrying in ${Math.round(delay)}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        /**
+         * 입력된 한국어 텍스트에 맞춤법 및 띄어쓰기를 교정하여 적용합니다. (Debounced Call)
+         */
+        async function applySpacing() {
+            const userText = inputElement.value.trim();
+            errorMessageElement.textContent = '';
+            errorMessageElement.classList.add('hidden');
+            copyButton.disabled = true;
+
+            if (!userText) {
+                outputElement.textContent = '맞춤법 및 띄어쓰기 교정 결과가 여기에 자동으로 표시됩니다.';
+                readyStatus.classList.remove('hidden');
+                processingStatus.classList.add('hidden');
+                return;
+            }
+
+            // 중복 처리 방지
+            if (isProcessing) return;
+
+            // UI 상태 업데이트: 로딩 시작
+            isProcessing = true;
+            processingStatus.classList.remove('hidden');
+            readyStatus.classList.add('hidden');
+            outputElement.textContent = 'AI가 맞춤법 및 띄어쓰기를 교정하고 있습니다. 잠시만 기다려주세요...';
+
+
+            // 시스템 프롬프트 업데이트: 맞춤법(Spelling) 기능 추가
+            const systemPrompt = "당신은 한국어 맞춤법 및 띄어쓰기 교정 전문가입니다. 사용자가 입력한 문장에 대해 문맥에 맞는 정확한 맞춤법과 띄어쓰기만을 적용하여, 다른 설명이나 부연 없이 **교정된 문장만을 출력**해야 합니다. 어떠한 경우에도 입력 텍스트 외의 다른 내용은 포함하지 마세요.";
+            const userQuery = userText;
+            const apiKey = ""; // API Key는 런타임에 삽입됩니다.
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            try {
+                const response = await retryFetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const correctedText = candidate.content.parts[0].text.trim();
+                    outputElement.textContent = correctedText;
+                    copyButton.disabled = false;
+                } else {
+                    throw new Error("API 응답에서 교정된 텍스트를 찾을 수 없습니다.");
+                }
+
+            } catch (error) {
+                console.error("맞춤법/띄어쓰기 교정 오류:", error);
+                errorMessageElement.textContent = `교정 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요: ${error.message}`;
+                errorMessageElement.classList.remove('hidden');
+                outputElement.textContent = '오류가 발생하여 맞춤법 및 띄어쓰기를 교정할 수 없습니다.';
+            } finally {
+                // UI 상태 업데이트: 로딩 종료
+                isProcessing = false;
+                processingStatus.classList.add('hidden');
+                readyStatus.classList.remove('hidden');
+            }
+        }
+
+        // 결과 복사 함수
+        window.copyResult = function() {
+            const textToCopy = outputElement.textContent;
+
+            // 빈 텍스트나 오류 메시지는 복사하지 않음
+            if (textToCopy.trim() === '맞춤법 및 띄어쓰기 교정 결과가 여기에 자동으로 표시됩니다.' || textToCopy.trim().startsWith('오류가 발생하여') || textToCopy.trim().startsWith('AI가 맞춤법 및 띄어쓰기를 교정하고 있습니다.')) {
+                 showMessage("복사할 내용이 없습니다.");
+                 return;
+            }
+
+            // document.execCommand('copy') 사용
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = textToCopy;
+            document.body.appendChild(tempTextarea);
+            tempTextarea.select();
+
+            try {
+                document.execCommand('copy');
+                showMessage("교정된 텍스트가 클립보드에 복사되었습니다!");
+            } catch (err) {
+                console.error('클립보드 복사 실패:', err);
+                showMessage("클립보드 복사에 실패했습니다. 텍스트를 수동으로 복사해주세요.");
+            } finally {
+                document.body.removeChild(tempTextarea);
+            }
+        }
+    </script>
+</body>
+</html>
