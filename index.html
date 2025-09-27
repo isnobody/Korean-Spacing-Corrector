@@ -252,7 +252,11 @@
             // 시스템 프롬프트 업데이트: 맞춤법(Spelling) 기능 추가
             const systemPrompt = "당신은 한국어 맞춤법 및 띄어쓰기 교정 전문가입니다. 사용자가 입력한 문장에 대해 문맥에 맞는 정확한 맞춤법과 띄어쓰기만을 적용하여, 다른 설명이나 부연 없이 **교정된 문장만을 출력**해야 합니다. 어떠한 경우에도 입력 텍스트 외의 다른 내용은 포함하지 마세요.";
             const userQuery = userText;
-            const apiKey = ""; // API Key는 런타임에 삽입됩니다.
+            
+            // [중요] 외부 환경(GitHub Pages, 로컬 파일)에서 실행 시: 
+            // 1. Google AI Studio에서 발급받은 실제 API Key를 큰따옴표 안에 넣어주세요. (예: "AIzaSy...")
+            // 2. Canvas 환경에서 실행 시에는, 이 값을 빈 문자열 "" 그대로 두세요.
+            const apiKey = "AIzaSyChE5RCxt2dxkIgb3U3OVnd7X9JJHnFW5Y"; // [여기에 발급받은 키를 " " 안에 붙여넣으세요.]
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
